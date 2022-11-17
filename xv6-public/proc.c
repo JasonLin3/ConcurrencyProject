@@ -532,3 +532,61 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+int 
+clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack) {
+  int i, pid;
+  struct proc *np;
+  struct proc *curproc = myproc();
+
+  // Allocate process.
+  if((np = allocproc()) == 0){
+    return -1;
+  }
+
+  // set up stack
+
+  // copy arguments and return values
+  memmove(stack+PGSIZE-4, &arg2, sizeof(arg2));
+  memmove(stack+PGSIZE-8, &arg1, sizeof(arg1));
+  memmove(stack+PGSIZE-12, (void*)0xffffffff, sizeof((void*)0xffffffff)); // might break
+  np->stack = stack;
+
+  np->pgdir = curproc->pgdir;
+  np->sz = curproc->sz;
+  np->parent = curproc;
+  *np->tf = *curproc->tf;
+
+  // change registers
+  np->tf->eip = (int)fcn;
+  np->tf->esp = (uint)stack + PGSIZE - 12;
+  np->tf->ebp = (uint)stack + PGSIZE - 12;
+
+
+  // Clear %eax so that fork returns 0 in the child.
+  np->tf->eax = 0;
+
+  // copy file descriptors
+  for(i = 0; i < NOFILE; i++)
+    if(curproc->ofile[i])
+      np->ofile[i] = filedup(curproc->ofile[i]);
+  np->cwd = idup(curproc->cwd);
+
+  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+
+  pid = np->pid;
+
+  acquire(&ptable.lock);
+
+  np->state = RUNNABLE;
+
+  release(&ptable.lock);
+
+  return pid;
+}
+
+int 
+join(void **stack) {
+  
+  return 0;
+}
