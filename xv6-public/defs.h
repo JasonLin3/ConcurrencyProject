@@ -149,6 +149,8 @@ char*           safestrcpy(char*, const char*, int);
 int             strlen(const char*);
 int             strncmp(const char*, const char*, uint);
 char*           strncpy(char*, const char*, int);
+int             thread_create(void (*)(void *, void *), void *, void *);
+int             thread_join();
 
 // syscall.c
 int             argint(int, int*);

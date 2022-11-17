@@ -556,6 +556,7 @@ clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack) {
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
+  np->pid = curproc->pid;
 
   // change registers
   np->tf->eip = (int)fcn;

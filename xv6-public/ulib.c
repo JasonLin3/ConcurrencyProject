@@ -105,8 +105,26 @@ memmove(void *vdst, const void *vsrc, int n)
   return vdst;
 }
 
+void
+lock_init(lock_t *lock) {
+  lock->flag = 0;
+}
+
+void
+lock_acquire(lock_t * lock) {
+  //xchg(volatile uint *addr, uint newval)
+  while(xchg(&lock->flag, 1) == 1)
+    ;
+}
+
+void
+lock_release(lock_t * lock) {
+  xchg(&lock->flag, 0);
+}
+
 int
 thread_create(void (*start_routine)(void *, void *), void *arg1, void *arg2) {
+  //xchg(volatile uint *addr, uint newval)
   return 0;
 }
 
@@ -114,3 +132,8 @@ int
 thread_join() {
   return 0;
 }
+
+
+
+
+
