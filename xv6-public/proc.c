@@ -176,7 +176,7 @@ growproc(int n)
 
   // modify size of proc's with same pgdir
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->pgdir == curproc->pgdir){
+    if(p != curproc && p->pgdir == curproc->pgdir){
       p->sz = curproc->sz;
     }
   }
@@ -292,7 +292,7 @@ wait(void)
     // Scan through table looking for exited children.
     havekids = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->parent != curproc)
+      if(p->parent != curproc || p->pgdir == curproc->pgdir)
         continue;
       havekids = 1;
       if(p->state == ZOMBIE){
@@ -569,12 +569,17 @@ clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack) {
     return -1;
   }
 
+  if((uint)stack + PGSIZE > curproc->sz) {
+    return -1;
+  }
+
   // set up stack
 
   // copy arguments and return values
+  void *ret_value=(void*)0xffffffff;
   memmove(stack+PGSIZE-4, &arg2, sizeof(arg2));
   memmove(stack+PGSIZE-8, &arg1, sizeof(arg1));
-  memmove(stack+PGSIZE-12, (void*)0xffffffff, sizeof((void*)0xffffffff)); // might break
+  memmove(stack+PGSIZE-12, &ret_value, sizeof(ret_value)); // might break
   np->stack = stack;
 
   np->pgdir = curproc->pgdir;

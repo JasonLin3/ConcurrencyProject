@@ -122,13 +122,49 @@ lock_release(lock_t * lock) {
   xchg(&lock->flag, 0);
 }
 
+int PGSIZE = 4096;
+// int max_threads = 64;
+void *malloc_ptrs[64];
+void *stack_ptrs[64];
+int available[64];
+
 int
 thread_create(void (*start_routine)(void *, void *), void *arg1, void *arg2) {
-  //xchg(volatile uint *addr, uint newval)
-  return 0;
+  // create new stack
+  void *stack = malloc(PGSIZE*2); // allocate twice as much space to page align
+  void* original_ptr = stack;
+  // page offset
+  if((uint)stack % PGSIZE != 0) {
+    stack += PGSIZE - ((uint)stack % PGSIZE);
+  } 
+  // Loop through thread process addresses
+  for(int i = 0; i<64; i++) {
+    if(available[i] == 0) {
+      malloc_ptrs[i] = original_ptr;
+      stack_ptrs[i] = stack;
+      available[i] = 1;
+      break;
+    }
+  }
+  int pid = clone(start_routine, arg1, arg2, stack);
+  return pid;
 }
+
 
 int
 thread_join() {
-  return 0;
+  void *stack;
+  int pid = join(&stack);
+  
+  for(int i = 0; i<64; i++) {
+    if(available[i] == 1 && stack_ptrs[i] == stack) {
+      free(malloc_ptrs[i]);
+      malloc_ptrs[i] = 0;
+      stack_ptrs[i] = 0;
+      available[i] = 0;
+      break;
+    }
+  }
+
+  return pid;
 }
