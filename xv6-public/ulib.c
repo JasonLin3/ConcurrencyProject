@@ -132,8 +132,3 @@ int
 thread_join() {
   return 0;
 }
-
-
-
-
-

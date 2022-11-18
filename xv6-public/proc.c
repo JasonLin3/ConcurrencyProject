@@ -7,6 +7,8 @@
 #include "proc.h"
 #include "spinlock.h"
 
+int debug = 1;
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -160,6 +162,7 @@ growproc(int n)
 {
   uint sz;
   struct proc *curproc = myproc();
+  struct proc *p;
 
   sz = curproc->sz;
   if(n > 0){
@@ -170,6 +173,14 @@ growproc(int n)
       return -1;
   }
   curproc->sz = sz;
+
+  // modify size of proc's with same pgdir
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->pgdir == curproc->pgdir){
+      p->sz = curproc->sz;
+    }
+  }
+
   switchuvm(curproc);
   return 0;
 }
@@ -539,8 +550,22 @@ clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack) {
   struct proc *np;
   struct proc *curproc = myproc();
 
+  // if (stack == 0) {
+  //   return -1;
+  // }
+
+  if ((uint)stack % PGSIZE != 0) {
+    if (debug) {
+      cprintf("NOT PAGE ALIGNED\n");
+    }
+    return -1;
+  }
+
   // Allocate process.
   if((np = allocproc()) == 0){
+    if (debug) {
+      cprintf("DOESN'T ALLOCATE PROC\n");
+    }
     return -1;
   }
 
@@ -556,13 +581,12 @@ clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack) {
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
-  np->pid = curproc->pid;
+  // np->pid = curproc->pid;
 
   // change registers
-  np->tf->eip = (int)fcn;
+  np->tf->eip = (int)(fcn);
   np->tf->esp = (uint)stack + PGSIZE - 12;
   np->tf->ebp = (uint)stack + PGSIZE - 12;
-
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
@@ -588,6 +612,44 @@ clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack) {
 
 int 
 join(void **stack) {
+  struct proc *p;
+  int havekids, pid;
+  struct proc *curproc = myproc();
   
-  return 0;
+  acquire(&ptable.lock);
+  for(;;){
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->parent != curproc)
+        continue;
+      if (p->pgdir != curproc->pgdir)
+        continue;
+      havekids = 1;
+      if(p->state == ZOMBIE){
+        // Found one.
+        pid = p->pid;
+        kfree(p->kstack);
+        p->kstack = 0;
+        // freevm(p->pgdir);
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->state = UNUSED;
+        *stack = p->stack;
+        release(&ptable.lock);
+        return pid;
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || curproc->killed){
+      release(&ptable.lock);
+      return -1;
+    }
+
+    // Wait for children to exit.  (See wakeup1 call in proc_exit.)
+    sleep(curproc, &ptable.lock);  //DOC: wait-sleep
+  }
 }
